@@ -11,6 +11,11 @@ the bootstrap problem of verifying a shell library from shell.
 gitpkg install verify-lib
 ```
 
+### AUR
+```sh
+yay -S verify-lib
+```
+
 ### Manually
 
 ```sh
