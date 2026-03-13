@@ -1,0 +1,3 @@
+# depends
+system:gcc
+system:make
