@@ -5,23 +5,24 @@ BIN=./verify-lib
 PASS=0
 FAIL=0
 
+ok()   { PASS=$((PASS + 1)); }
+fail() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
+
 expect_ok() {
     local desc="$1"; shift
     if "$BIN" "$@" >/dev/null 2>&1; then
-        ((PASS++))
+        ok
     else
-        echo "FAIL (expected ok): $desc"
-        ((FAIL++))
+        fail "$desc"
     fi
 }
 
 expect_fail() {
     local desc="$1"; shift
     if "$BIN" "$@" >/dev/null 2>&1; then
-        echo "FAIL (expected fail): $desc"
-        ((FAIL++))
+        fail "$desc"
     else
-        ((PASS++))
+        ok
     fi
 }
 
@@ -64,10 +65,9 @@ if [[ $EUID -eq 0 ]]; then
     out=$("$BIN" "${LIB}/good.sh" "${LIB}/")
     real=$(realpath "${LIB}/good.sh")
     if [[ "$out" == "$real" ]]; then
-        ((PASS++))
+        ok
     else
-        echo "FAIL: output '$out' != expected '$real'"
-        ((FAIL++))
+        fail "output '$out' != expected '$real'"
     fi
 
     # group-writable
