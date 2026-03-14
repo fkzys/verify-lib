@@ -5,14 +5,14 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: sudo apt-get update && sudo apt-get install -y cppcheck
       - run: cppcheck --error-exitcode=1 --enable=warning,style,performance verify-lib.c
 
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: make build
       - run: bash -x tests/test.sh
       - run: sudo bash -x tests/test.sh
