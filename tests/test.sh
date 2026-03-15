@@ -97,6 +97,18 @@ if [[ $EUID -eq 0 ]]; then
         chmod 644 "${LIB}/badgroup.sh"
         expect_fail "non-root group" "${LIB}/badgroup.sh" "${LIB}/"
     fi
+
+    # group-writable directory with non-root gid
+    if getent group nobody &>/dev/null; then
+        GWDIR="${LIB}/gwdir"
+        mkdir -p "${GWDIR}"
+        chown root:nobody "${GWDIR}"
+        chmod 775 "${GWDIR}"
+        cp "${LIB}/good.sh" "${GWDIR}/lib.sh"
+        chown root:root "${GWDIR}/lib.sh"
+        chmod 644 "${GWDIR}/lib.sh"
+        expect_fail "group-writable dir with non-root gid" "${GWDIR}/lib.sh" "${LIB}/"
+    fi
 else
     echo "SKIP: ownership tests (not root)"
 
