@@ -33,7 +33,8 @@ static unsigned int get_overflow_uid(void)
     FILE *f = fopen("/proc/sys/kernel/overflowuid", "r");
     if (!f) return 65534;
     unsigned int uid = 65534;
-    fscanf(f, "%u", &uid);
+    if (fscanf(f, "%u", &uid) != 1)
+        uid = 65534;
     fclose(f);
     return uid;
 }
