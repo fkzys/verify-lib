@@ -138,14 +138,16 @@ if unshare --user --map-root-user true 2>/dev/null; then
         " >/dev/null 2>&1 \
         && ok || fail "userns: overflow_uid on ro mount should pass"
 
-    # overflow_uid on read-write mount inside user ns — should reject
+    # overflow_uid on read-write bind mount inside user ns — should reject
+    # (rw mount means the path is writable, so unmapped uid is not safe)
     unshare --user --map-root-user --mount -- \
         sh -c "
+            mount --bind '${USERNS_DIR}/lib' '${USERNS_DIR}/lib'
             exec $BIN '${USERNS_DIR}/lib/test.sh' '${USERNS_DIR}/lib/'
         " >/dev/null 2>&1 \
         && fail "userns: overflow_uid on rw mount should fail" || ok
 
-    # uid=65534 outside user ns — should reject (not a userns, just bad owner)
+    # uid=65534 outside user ns — should reject
     if [[ $EUID -eq 0 ]]; then
         cp "${LIB}/good.sh" "${LIB}/overflow.sh"
         chown 65534:65534 "${LIB}/overflow.sh"
