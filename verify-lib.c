@@ -1,14 +1,53 @@
-/* src/verify-lib.c */
-
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <limits.h>
 #include <errno.h>
 
-static int verify_dir_chain(const char *path, const char *prefix)
+/* Check if running inside a non-init user namespace */
+static int in_user_ns(void)
+{
+    FILE *f = fopen("/proc/self/uid_map", "r");
+    if (!f) return 0;
+
+    unsigned int inner, count;
+    unsigned long long outer;
+    int lines = 0, trivial = 0;
+
+    while (fscanf(f, "%u %llu %u", &inner, &outer, &count) == 3) {
+        lines++;
+        if (inner == 0 && outer == 0 && count >= 1000)
+            trivial = 1;
+    }
+    fclose(f);
+
+    return !(lines == 1 && trivial);
+}
+
+/* Read kernel overflow uid (shown for unmapped uids in user ns) */
+static unsigned int get_overflow_uid(void)
+{
+    FILE *f = fopen("/proc/sys/kernel/overflowuid", "r");
+    if (!f) return 65534;
+    unsigned int uid = 65534;
+    fscanf(f, "%u", &uid);
+    fclose(f);
+    return uid;
+}
+
+/* Check if path resides on a read-only mount */
+static int on_readonly_mount(const char *path)
+{
+    struct statvfs sv;
+    if (statvfs(path, &sv) != 0) return 0;
+    return (sv.f_flag & ST_RDONLY) != 0;
+}
+
+static int verify_dir_chain(const char *path, const char *prefix,
+                            int userns, unsigned int overflow_uid)
 {
     char buf[PATH_MAX];
     struct stat st;
@@ -28,15 +67,19 @@ static int verify_dir_chain(const char *path, const char *prefix)
         }
 
         if (st.st_uid != 0) {
-            fprintf(stderr, "verify-lib: %s uid=%d, expected 0\n",
-                    buf, st.st_uid);
-            return 0;
+            if (!(userns && st.st_uid == overflow_uid && on_readonly_mount(buf))) {
+                fprintf(stderr, "verify-lib: %s uid=%d, expected 0\n",
+                        buf, st.st_uid);
+                return 0;
+            }
         }
 
         if ((st.st_mode & S_IWGRP) && st.st_gid != 0) {
-            fprintf(stderr, "verify-lib: %s group-writable with gid=%d\n",
-                    buf, st.st_gid);
-            return 0;
+            if (!(userns && st.st_gid == overflow_uid && on_readonly_mount(buf))) {
+                fprintf(stderr, "verify-lib: %s group-writable with gid=%d\n",
+                        buf, st.st_gid);
+                return 0;
+            }
         }
 
         if ((st.st_mode & S_IWOTH) && !(st.st_mode & S_ISVTX)) {
@@ -63,6 +106,8 @@ int main(int argc, char *argv[])
 
     const char *file = argv[1];
     const char *prefix = argc == 3 ? argv[2] : "/usr/lib/";
+    int userns = in_user_ns();
+    unsigned int overflow_uid = get_overflow_uid();
 
     char *real = realpath(file, NULL);
     if (!real) {
@@ -92,10 +137,15 @@ int main(int argc, char *argv[])
     }
 
     if (st.st_uid != 0 || st.st_gid != 0) {
-        fprintf(stderr, "verify-lib: %s ownership %d:%d, expected 0:0\n",
-                real, st.st_uid, st.st_gid);
-        free(real);
-        return 1;
+        if (userns && st.st_uid == overflow_uid && st.st_gid == overflow_uid
+            && on_readonly_mount(real)) {
+            /* unmapped root on ro mount inside user ns */
+        } else {
+            fprintf(stderr, "verify-lib: %s ownership %d:%d, expected 0:0\n",
+                    real, st.st_uid, st.st_gid);
+            free(real);
+            return 1;
+        }
     }
 
     if (st.st_mode & (S_IWGRP | S_IWOTH)) {
@@ -105,7 +155,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (!verify_dir_chain(real, prefix)) {
+    if (!verify_dir_chain(real, prefix, userns, overflow_uid)) {
         free(real);
         return 1;
     }
