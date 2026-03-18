@@ -32,7 +32,7 @@ trap 'rm -rf "$PREFIX"' EXIT
 
 mkdir -p "$LIB"
 
-# ── Tests that work without root ────────────────────────
+# ── Basic tests (no root required) ─────────────────────
 
 # symlink escape
 echo '# valid' > "${LIB}/good.sh"
@@ -54,10 +54,9 @@ expect_fail "directory" "${LIB}/subdir" "${LIB}/"
 # default prefix rejects our temp path
 expect_fail "default prefix rejects" "${LIB}/good.sh"
 
-# ── Tests that require root ─────────────────────────────
+# ── Ownership tests (require root) ─────────────────────
 
 if [[ $EUID -eq 0 ]]; then
-    # valid file: root-owned, no group/other write
     chown root:root "$LIB" "${LIB}/good.sh"
     expect_ok "valid file" "${LIB}/good.sh" "${LIB}/"
 
@@ -70,13 +69,13 @@ if [[ $EUID -eq 0 ]]; then
         fail "output '$out' != expected '$real'"
     fi
 
-    # group-writable
+    # group-writable file
     cp "${LIB}/good.sh" "${LIB}/gwrite.sh"
     chown root:root "${LIB}/gwrite.sh"
     chmod 664 "${LIB}/gwrite.sh"
     expect_fail "group-writable" "${LIB}/gwrite.sh" "${LIB}/"
 
-    # world-writable
+    # world-writable file
     cp "${LIB}/good.sh" "${LIB}/wwrite.sh"
     chown root:root "${LIB}/wwrite.sh"
     chmod 646 "${LIB}/wwrite.sh"
@@ -112,9 +111,49 @@ if [[ $EUID -eq 0 ]]; then
 else
     echo "SKIP: ownership tests (not root)"
 
-    # without root, ALL files fail verify-lib because uid != 0
-    # verify that our file is correctly rejected
+    # without root, ALL files fail because uid != 0
     expect_fail "non-root owned file" "${LIB}/good.sh" "${LIB}/"
+fi
+
+# ── User namespace tests ───────────────────────────────
+
+if unshare --user --map-root-user true 2>/dev/null; then
+    USERNS_DIR=$(mktemp -d)
+    trap 'rm -rf "$USERNS_DIR" "$PREFIX"' EXIT
+
+    mkdir -p "${USERNS_DIR}/lib"
+    echo '# valid' > "${USERNS_DIR}/lib/test.sh"
+    chmod 644 "${USERNS_DIR}/lib/test.sh"
+
+    if [[ $EUID -eq 0 ]]; then
+        chown root:root "${USERNS_DIR}/lib" "${USERNS_DIR}/lib/test.sh"
+    fi
+
+    # overflow_uid on read-only mount inside user ns — should pass
+    unshare --user --map-root-user --mount -- \
+        sh -c "
+            mount --bind '${USERNS_DIR}/lib' '${USERNS_DIR}/lib'
+            mount -o remount,ro,bind '${USERNS_DIR}/lib'
+            exec $BIN '${USERNS_DIR}/lib/test.sh' '${USERNS_DIR}/lib/'
+        " >/dev/null 2>&1 \
+        && ok || fail "userns: overflow_uid on ro mount should pass"
+
+    # overflow_uid on read-write mount inside user ns — should reject
+    unshare --user --map-root-user --mount -- \
+        sh -c "
+            exec $BIN '${USERNS_DIR}/lib/test.sh' '${USERNS_DIR}/lib/'
+        " >/dev/null 2>&1 \
+        && fail "userns: overflow_uid on rw mount should fail" || ok
+
+    # uid=65534 outside user ns — should reject (not a userns, just bad owner)
+    if [[ $EUID -eq 0 ]]; then
+        cp "${LIB}/good.sh" "${LIB}/overflow.sh"
+        chown 65534:65534 "${LIB}/overflow.sh"
+        chmod 644 "${LIB}/overflow.sh"
+        expect_fail "overflow_uid outside userns" "${LIB}/overflow.sh" "${LIB}/"
+    fi
+else
+    echo "SKIP: user namespace tests (unshare not available)"
 fi
 
 echo ""
