@@ -1,8 +1,8 @@
 # verify-lib
 
-[![CI](https://github.com/rpPH4kQocMjkm2Ve/verify-lib/actions/workflows/ci.yml/badge.svg)](https://github.com/rpPH4kQocMjkm2Ve/verify-lib/actions/workflows/ci.yml)
-![License](https://img.shields.io/github/license/rpPH4kQocMjkm2Ve/verify-lib)
-[![Spec](https://img.shields.io/endpoint?url=https://gitlab.com/fkzys/specs/-/raw/main/version.json&maxAge=300)](https://gitlab.com/fkzys/specs)
+[![CI](https://github.com/fkzys/verify-lib/actions/workflows/ci.yml/badge.svg)](https://github.com/fkzys/verify-lib/actions/workflows/ci.yml)
+![License](https://img.shields.io/github/license/fkzys/verify-lib)
+[![Spec](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/fkzys/specs/refs/heads/main/version.json&maxAge=300)](https://github.com/fkzys/specs)
 
 Validates shell library files before sourcing. Compiled binary — breaks
 the bootstrap problem of verifying a shell library from shell.
